@@ -39,7 +39,7 @@ const (
 	Key     = ".key"
 	RARFile = "data.rar"
 
-	FileStateWaitingInterval = int64(1000 * 20)
+	FileStateWaitingInterval = int64(1000 * 60)
 )
 
 func NewFileWork() *FileWork {
@@ -193,6 +193,52 @@ func (this *FileWork) FileInfo() map[string]map[string]int64 {
 	data["confirming"] = confirming
 	data["processing"] = processing
 	data["complete"] = complete
+
+	return data
+}
+
+func (this *FileWork) FileInfoOverView() map[string]interface{} {
+	waiting := 0
+	confirming := 0
+	processing := 0
+	complete := 0
+
+	files, err := ioutil.ReadDir(PasswordPath)
+	if nil == err {
+		for _, file := range files {
+			if !file.IsDir() {
+				if strings.HasSuffix(file.Name(), Waiting) {
+					waiting++
+				} else if strings.HasSuffix(file.Name(), Confirming) {
+					confirming++
+				} else if strings.HasSuffix(file.Name(), Processing) {
+					processing++
+				} else if strings.HasSuffix(file.Name(), Complete) {
+					complete++
+				}
+			}
+		}
+	} else {
+		log.Error.Println("FileWork FileInfo", err)
+	}
+
+	total := waiting + confirming + processing + complete
+
+	waitingPercent := (waiting * 100) / total
+	confirmingPercent := (confirming * 100) / total
+	processingPercent := (processing * 100) / total
+	completePercent := 100 - waitingPercent - confirmingPercent - processingPercent
+
+	data := make(map[string]interface{})
+	data["total"] = total
+	data["waiting"] = waiting
+	data["waiting-percent"] = strconv.Itoa(waitingPercent) + "%"
+	data["confirming"] = confirming
+	data["confirming-percent"] = strconv.Itoa(confirmingPercent) + "%"
+	data["processing"] = processing
+	data["processing-percent"] = strconv.Itoa(processingPercent) + "%"
+	data["complete"] = complete
+	data["complete-percent"] = strconv.Itoa(completePercent) + "%"
 
 	return data
 }

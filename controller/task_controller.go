@@ -2,9 +2,25 @@ package controller
 
 import (
 	"dispatch/dto"
+	"dispatch/time"
 	"dispatch/variable"
 	"net/http"
+	"sync"
 )
+
+var (
+	threadMutex sync.Mutex
+	thread      = make(map[string]int64)
+	taskInfo    = TaskInfo{
+		ThreadCount: 10,
+		RARMD5:      variable.FileWork.RARFileMD5(),
+	}
+)
+
+type TaskInfo struct {
+	ThreadCount int    `json:"thread-count"`
+	RARMD5      string `json:"rar-md5"`
+}
 
 func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun := make(map[string]func(http.ResponseWriter, *http.Request))
@@ -13,9 +29,14 @@ func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun["/task-complete"] = Complete
 	fun["/task-discover"] = Discover
 	fun["/task-file-info"] = FileInfo
+	fun["/task-file-info-over-view"] = FileInfoOverView
 	fun["/task-gen-file"] = GenFile
-	fun["/task-rar-file-md5"] = RARFileMD5
 	fun["/task-download-rar-file"] = DownloadRARFile
+	fun["/mining-info"] = MiningInfo
+	fun["/mining-run-state"] = MiningRunState
+	fun["/mining-run-info"] = MiningRunInfo
+
+	go checkThread()
 
 	return fun
 }
@@ -40,14 +61,64 @@ func FileInfo(response http.ResponseWriter, request *http.Request) {
 	response.Write(dto.Success().SetData(variable.FileWork.FileInfo()).Bytes())
 }
 
+func FileInfoOverView(response http.ResponseWriter, request *http.Request) {
+	response.Write(dto.Success().SetData(variable.FileWork.FileInfoOverView()).Bytes())
+}
+
 func GenFile(response http.ResponseWriter, request *http.Request) {
 	response.Write(dto.SuccessBytes())
 }
 
-func RARFileMD5(response http.ResponseWriter, request *http.Request) {
-	response.Write(dto.Success().SetData(variable.FileWork.RARFileMD5()).Bytes())
-}
-
 func DownloadRARFile(response http.ResponseWriter, request *http.Request) {
 	response.Write(variable.FileWork.DownloadRARFile())
+}
+
+func MiningInfo(response http.ResponseWriter, request *http.Request) {
+	response.Write(dto.Success().SetData(taskInfo).Bytes())
+}
+
+func MiningRunState(response http.ResponseWriter, request *http.Request) {
+	addThread(request.URL.Query().Get("thread"))
+	response.Write(dto.SuccessBytes())
+}
+
+func MiningRunInfo(response http.ResponseWriter, request *http.Request) {
+	data := make(map[string]interface{})
+	threadMutex.Lock()
+	data["thread-count"] = len(thread)
+	data["thread"] = thread
+	bytes := dto.Success().SetData(data).Bytes()
+	threadMutex.Unlock()
+
+	response.Write(bytes)
+}
+
+func checkThread() {
+	interval := int64(1000 * 60)
+	for {
+		ts := time.TimestampNowMs()
+		threadMutex.Lock()
+		for k, v := range thread {
+			if (ts - v) > interval {
+				delete(thread, k)
+			}
+		}
+		threadMutex.Unlock()
+	}
+}
+
+func addThread(name string) {
+	if "" != name {
+		threadMutex.Lock()
+		defer threadMutex.Unlock()
+		thread[name] = time.TimestampNowMs()
+	}
+}
+
+func removeThread(name string) {
+	if "" != name {
+		threadMutex.Lock()
+		defer threadMutex.Unlock()
+		delete(thread, name)
+	}
 }
