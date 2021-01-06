@@ -17,6 +17,7 @@ func Run() {
 	}
 
 	fmt.Println("starting dispatch at port", variable.Conf.App.Port)
+	log.Info.Println("starting dispatch at port", variable.Conf.App.Port)
 
 	err := http.ListenAndServe(":"+variable.Conf.App.Port, nil)
 	if err != nil {
