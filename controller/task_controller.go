@@ -12,15 +12,12 @@ import (
 var (
 	threadMutex sync.Mutex
 	thread      = make(map[string]int64)
-	taskInfo    = TaskInfo{
-		ThreadCount: 10,
-		RARMD5:      variable.FileWork.RARFileMD5(),
-	}
+	taskInfo    *TaskInfo
 )
 
 type TaskInfo struct {
-	ThreadCount int    `json:"thread-count"`
-	RARMD5      string `json:"rar-md5"`
+	CoreThreadCount int    `json:"core-thread-count"`
+	RARMD5          string `json:"rar-md5"`
 }
 
 func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
@@ -75,6 +72,12 @@ func DownloadRARFile(response http.ResponseWriter, request *http.Request) {
 }
 
 func MiningInfo(response http.ResponseWriter, request *http.Request) {
+	if nil == taskInfo {
+		taskInfo = &TaskInfo{
+			CoreThreadCount: variable.Conf.CoreThreadCount,
+			RARMD5:          variable.FileWork.RARFileMD5(),
+		}
+	}
 	response.Write(dto.Success().SetData(taskInfo).Bytes())
 }
 

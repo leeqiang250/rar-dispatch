@@ -15,6 +15,8 @@ type Config struct {
 	App struct {
 		Port string `yaml:"port"`
 	}
+
+	CoreThreadCount int `yaml:"core-thread-count"`
 }
 
 func ConfigInit() *Config {

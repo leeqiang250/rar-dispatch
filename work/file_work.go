@@ -74,8 +74,14 @@ func (this *FileWork) Get() *File {
 				err = os.Rename(PasswordPath+group, PasswordPath+group+Confirming)
 				if nil == err {
 					this.mutex.Lock()
-					this.data[group] = time.TimestampNowMs()
+					_, ok := this.data[group]
+					if !ok {
+						this.data[group] = time.TimestampNowMs()
+					}
 					this.mutex.Unlock()
+					if ok {
+						return nil
+					}
 					log.Info.Println("FileWork Get", group)
 					return &File{
 						Name: group,
