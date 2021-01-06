@@ -6,6 +6,7 @@ import (
 	"dispatch/variable"
 	"net/http"
 	"sync"
+	time2 "time"
 )
 
 var (
@@ -96,6 +97,7 @@ func MiningRunInfo(response http.ResponseWriter, request *http.Request) {
 func checkThread() {
 	interval := int64(1000 * 60)
 	for {
+		time2.Sleep(time2.Minute)
 		ts := time.TimestampNowMs()
 		threadMutex.Lock()
 		for k, v := range thread {

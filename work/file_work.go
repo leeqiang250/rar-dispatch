@@ -54,7 +54,7 @@ func (this *FileWork) Run() {
 	for {
 		this.Cancel()
 
-		time2.Sleep(time2.Second)
+		time2.Sleep(time2.Minute)
 	}
 }
 
