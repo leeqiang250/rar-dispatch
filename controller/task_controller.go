@@ -11,9 +11,15 @@ import (
 
 var (
 	threadMutex sync.Mutex
-	thread      = make(map[string]int64)
+	thread      = make(map[string]map[string]*RunInfo)
 	taskInfo    *TaskInfo
+	interval    = int64(1000 * 60)
 )
+
+type RunInfo struct {
+	Key string `json:"key"`
+	Ts  int64  `json:"ts"`
+}
 
 type TaskInfo struct {
 	CoreThreadCount int    `json:"core-thread-count"`
@@ -31,8 +37,8 @@ func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun["/task-gen-file"] = GenFile
 	fun["/task-download-rar-file"] = DownloadRARFile
 	fun["/mining-info"] = MiningInfo
+	fun["/mining-run-report"] = MiningRunReport
 	fun["/mining-run-state"] = MiningRunState
-	fun["/mining-run-info"] = MiningRunInfo
 
 	go checkThread()
 
@@ -81,15 +87,22 @@ func MiningInfo(response http.ResponseWriter, request *http.Request) {
 	response.Write(dto.Success().SetData(taskInfo).Bytes())
 }
 
-func MiningRunState(response http.ResponseWriter, request *http.Request) {
-	addThread(request.URL.Query().Get("thread"))
-	response.Write(dto.SuccessBytes())
+func MiningRunReport(response http.ResponseWriter, request *http.Request) {
+	addThread(request.URL.Query().Get("ip"), request.URL.Query().Get("group"), request.URL.Query().Get("key"))
+	response.Write(dto.Success().SetData(true).Bytes())
 }
 
-func MiningRunInfo(response http.ResponseWriter, request *http.Request) {
+func MiningRunState(response http.ResponseWriter, request *http.Request) {
 	data := make(map[string]interface{})
 	threadMutex.Lock()
-	data["thread-count"] = len(thread)
+	ipCount := 0
+	groupCount := 0
+	for _, groups := range thread {
+		ipCount++
+		groupCount += len(groups)
+	}
+	data["server-count"] = ipCount
+	data["thread-count"] = groupCount
 	data["thread"] = thread
 	bytes := dto.Success().SetData(data).Bytes()
 	threadMutex.Unlock()
@@ -98,25 +111,40 @@ func MiningRunInfo(response http.ResponseWriter, request *http.Request) {
 }
 
 func checkThread() {
-	interval := int64(1000 * 60)
 	for {
 		time2.Sleep(time2.Minute)
 		ts := time.TimestampNowMs()
 		threadMutex.Lock()
-		for k, v := range thread {
-			if (ts - v) > interval {
-				delete(thread, k)
+		for _, groups := range thread {
+			for group, info := range groups {
+				if (ts - info.Ts) > interval {
+					delete(groups, group)
+				}
 			}
 		}
 		threadMutex.Unlock()
 	}
 }
 
-func addThread(name string) {
-	if "" != name {
+func addThread(ip string, group string, key string) {
+	if "" != ip && "" != group {
 		threadMutex.Lock()
 		defer threadMutex.Unlock()
-		thread[name] = time.TimestampNowMs()
+		groups, ok := thread[ip]
+		if !ok {
+			thread[ip] = make(map[string]*RunInfo)
+			groups, _ = thread[ip]
+		}
+		info, ok := groups[group]
+		if !ok {
+			groups[group] = &RunInfo{
+				Key: "",
+				Ts:  0,
+			}
+			info, _ = groups[group]
+		}
+		info.Key = key
+		info.Ts = time.TimestampNowMs()
 	}
 }
 

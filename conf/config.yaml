@@ -1,4 +1,4 @@
 app:
   port: "8158"
 
-core-thread-count: 1
+core-thread-count: 3
