@@ -9,6 +9,7 @@ import (
 	"github.com/satori/go.uuid"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,15 +31,17 @@ type File struct {
 
 const (
 	PasswordPath = "./data/"
+	Pwd          = ".pwd"
 	Waiting      = ".waiting"
 	Confirming   = ".confirming"
 	Processing   = ".processing"
 	Complete     = ".complete"
 	Tmp          = ".tmp"
 
-	Key         = ".key"
-	RARFile     = "./data.rar"
-	ProgramFile = "./unrar"
+	Key              = ".key"
+	RARFile          = "./data.rar"
+	ProgramFileLinux = "./unrarlinux"
+	ProgramFileMacOS = "./unrarmacos"
 
 	FileStateWaitingInterval = int64(1000 * 60)
 )
@@ -54,11 +57,20 @@ func NewFileWork() *FileWork {
 func (this *FileWork) Run() {
 	this.CancelAll()
 
-	for {
-		this.Cancel()
+	go func() {
+		for {
+			this.Cancel()
+			time2.Sleep(time2.Minute)
+		}
+	}()
 
-		time2.Sleep(time2.Minute)
-	}
+	//go func() {
+	//	for {
+	//		if !this.ProductFile() {
+	//			time2.Sleep(time2.Minute)
+	//		}
+	//	}
+	//}()
 }
 
 func (this *FileWork) Get() *File {
@@ -127,6 +139,35 @@ func (this *FileWork) Complete(group string) bool {
 	}
 
 	return nil == err
+}
+
+func (this *FileWork) ProductFile() bool {
+	result := false
+	files, err := ioutil.ReadDir(PasswordPath)
+	if nil == err {
+		for _, file := range files {
+			if !file.IsDir() {
+				group := file.Name()
+				if strings.HasSuffix(group, Pwd) {
+					group = file.Name()[:len(group)-len(Pwd)]
+					if "" != group {
+
+						err := os.Rename(PasswordPath+file.Name(), PasswordPath+group)
+						if nil == err {
+							log.Info.Println("FileWork CancelAll", group)
+						} else {
+							log.Error.Println("FileWork CancelAll", group, err)
+						}
+					}
+				}
+			}
+		}
+	} else {
+		log.Error.Println("FileWork ProductFile", err)
+		time2.Sleep(time2.Second)
+	}
+
+	return result
 }
 
 func (this *FileWork) Cancel() {
@@ -319,14 +360,19 @@ func (this *FileWork) DownloadFile(md5 string) []byte {
 }
 
 func (this *FileWork) LoadFile() {
-	names := []string{RARFile, ProgramFile}
+	var names []string
+	if "linux" == runtime.GOOS {
+		names = []string{RARFile, ProgramFileLinux}
+	} else {
+		names = []string{RARFile, ProgramFileMacOS}
+	}
 	for _, name := range names {
 		content := this.ReadFile(name)
 		if nil != content {
 			this.file[fmt.Sprintf("%x", md5.Sum(content))] = content
-			if name == RARFile {
+			if name == names[0] {
 				this.rar2MD5 = fmt.Sprintf("%x", md5.Sum(content))
-			} else if name == ProgramFile {
+			} else if name == names[1] {
 				this.programMD5 = fmt.Sprintf("%x", md5.Sum(content))
 			}
 		}

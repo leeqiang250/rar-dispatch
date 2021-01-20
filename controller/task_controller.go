@@ -5,6 +5,7 @@ import (
 	"dispatch/time"
 	"dispatch/variable"
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	time2 "time"
@@ -23,6 +24,7 @@ type RunInfo struct {
 }
 
 type TaskInfo struct {
+	OS              string `json:"os"`
 	CoreThreadCount int    `json:"core-thread-count"`
 	ReportInterval  int    `json:"report-interval"`
 	RarFilePath     string `json:"rar-file-path"`
@@ -93,6 +95,7 @@ func DownloadRARFile(response http.ResponseWriter, request *http.Request) {
 func MiningInfo(response http.ResponseWriter, request *http.Request) {
 	if nil == taskInfo {
 		taskInfo = &TaskInfo{
+			OS:              runtime.GOOS,
 			CoreThreadCount: variable.Conf.CoreThreadCount,
 			ReportInterval:  variable.Conf.ReportInterval,
 			RarFilePath:     "./f",

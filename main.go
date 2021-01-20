@@ -12,7 +12,7 @@ func main() {
 
 	variable.Conf = common.ConfigInit()
 
-	go variable.FileWork.Run()
+	variable.FileWork.Run()
 
 	server.Run()
 }
