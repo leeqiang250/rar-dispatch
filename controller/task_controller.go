@@ -5,6 +5,7 @@ import (
 	"dispatch/time"
 	"dispatch/variable"
 	"net/http"
+	"strconv"
 	"sync"
 	time2 "time"
 )
@@ -23,7 +24,11 @@ type RunInfo struct {
 
 type TaskInfo struct {
 	CoreThreadCount int    `json:"core-thread-count"`
-	RARMD5          string `json:"rar-md5"`
+	ReportInterval  int    `json:"report-interval"`
+	RarFilePath     string `json:"rar-file-path"`
+	RarFilePathMD5  string `json:"rar-file-path-md5"`
+	ProgramPath     string `json:"program-path"`
+	ProgramPathMD5  string `json:"program-path-md5"`
 }
 
 func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
@@ -35,7 +40,7 @@ func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun["/task-file-info"] = FileInfo
 	fun["/task-file-info-over-view"] = FileInfoOverView
 	fun["/task-gen-file"] = GenFile
-	fun["/task-download-rar-file"] = DownloadRARFile
+	fun["/task-download-file"] = DownloadRARFile
 	fun["/mining-info"] = MiningInfo
 	fun["/mining-run-report"] = MiningRunReport
 	fun["/mining-run-state"] = MiningRunState
@@ -58,7 +63,7 @@ func Complete(response http.ResponseWriter, request *http.Request) {
 }
 
 func Discover(response http.ResponseWriter, request *http.Request) {
-	response.Write(dto.Success().SetData(variable.FileWork.Discover(request.URL.Query().Get("group"), request.URL.Query().Get("key"))).Bytes())
+	response.Write(dto.Success().SetData(variable.FileWork.Discover(request.URL.Query().Get("group"))).Bytes())
 }
 
 func FileInfo(response http.ResponseWriter, request *http.Request) {
@@ -70,25 +75,37 @@ func FileInfoOverView(response http.ResponseWriter, request *http.Request) {
 }
 
 func GenFile(response http.ResponseWriter, request *http.Request) {
+	count, err := strconv.Atoi(request.URL.Query().Get("count"))
+	if nil != err || count < 1 {
+		count = 1
+	}
+	for count > 0 {
+		variable.FileWork.GenFile()
+		count--
+	}
 	response.Write(dto.SuccessBytes())
 }
 
 func DownloadRARFile(response http.ResponseWriter, request *http.Request) {
-	response.Write(variable.FileWork.DownloadRARFile())
+	response.Write(variable.FileWork.DownloadFile(request.URL.Query().Get("md5")))
 }
 
 func MiningInfo(response http.ResponseWriter, request *http.Request) {
 	if nil == taskInfo {
 		taskInfo = &TaskInfo{
 			CoreThreadCount: variable.Conf.CoreThreadCount,
-			RARMD5:          variable.FileWork.RARFileMD5(),
+			ReportInterval:  variable.Conf.ReportInterval,
+			RarFilePath:     "./f",
+			RarFilePathMD5:  variable.FileWork.RARFileMD5(),
+			ProgramPath:     "./u",
+			ProgramPathMD5:  variable.FileWork.ProgramFileMD5(),
 		}
 	}
 	response.Write(dto.Success().SetData(taskInfo).Bytes())
 }
 
 func MiningRunReport(response http.ResponseWriter, request *http.Request) {
-	addThread(request.URL.Query().Get("ip"), request.URL.Query().Get("group"), request.URL.Query().Get("key"))
+	addThread(request.URL.Query().Get("ip"), request.URL.Query().Get("group"), request.URL.Query().Get("index"))
 	response.Write(dto.Success().SetData(true).Bytes())
 }
 
@@ -126,7 +143,7 @@ func checkThread() {
 	}
 }
 
-func addThread(ip string, group string, key string) {
+func addThread(ip string, group string, index string) {
 	if "" != ip && "" != group {
 		threadMutex.Lock()
 		defer threadMutex.Unlock()
@@ -143,7 +160,7 @@ func addThread(ip string, group string, key string) {
 			}
 			info, _ = groups[group]
 		}
-		info.Key = key
+		info.Key = index
 		info.Ts = time.TimestampNowMs()
 	}
 }

@@ -17,6 +17,7 @@ type Config struct {
 	}
 
 	CoreThreadCount int `yaml:"core-thread-count"`
+	ReportInterval  int `yaml:"report-interval"`
 }
 
 func ConfigInit() *Config {

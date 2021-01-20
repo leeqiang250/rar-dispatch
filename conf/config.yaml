@@ -1,4 +1,5 @@
 app:
   port: "8158"
 
-core-thread-count: 10
+core-thread-count: 1
+report-interval: 10

@@ -18,8 +18,9 @@ import (
 type FileWork struct {
 	mutex      sync.Mutex
 	data       map[string]int64
-	rarFile    []byte
-	rarFileMD5 string
+	rar2MD5    string
+	programMD5 string
+	file       map[string][]byte
 }
 
 type File struct {
@@ -28,16 +29,16 @@ type File struct {
 }
 
 const (
-	ResourcePath = "/resource/"
-	PasswordPath = ResourcePath + "password/"
+	PasswordPath = "./data/"
 	Waiting      = ".waiting"
 	Confirming   = ".confirming"
 	Processing   = ".processing"
 	Complete     = ".complete"
 	Tmp          = ".tmp"
 
-	Key     = ".key"
-	RARFile = "data.rar"
+	Key         = ".key"
+	RARFile     = "./data.rar"
+	ProgramFile = "./unrar"
 
 	FileStateWaitingInterval = int64(1000 * 60)
 )
@@ -45,6 +46,8 @@ const (
 func NewFileWork() *FileWork {
 	work := FileWork{}
 	work.data = make(map[string]int64)
+	work.file = make(map[string][]byte)
+	work.LoadFile()
 	return &work
 }
 
@@ -257,8 +260,7 @@ func (this *FileWork) GenFile() {
 
 		buf := bufio.NewWriter(file)
 
-		//content := 1000000
-		content := 200000
+		content := 3000
 		for content > 0 {
 			content--
 			buf.WriteString("," + strconv.Itoa(content))
@@ -275,30 +277,29 @@ func (this *FileWork) GenFile() {
 	}
 }
 
-func (this *FileWork) Discover(group string, key string) bool {
-	if "" != group && "" != key {
-		text := "group:" + group + ",key:" + key
-		name := ResourcePath + group + key + Key
+func (this *FileWork) Discover(group string) bool {
+	if "" != group {
+		name := "./" + group
 		file, err := os.OpenFile(name, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0666)
 		if nil == err {
 			defer file.Close()
 
 			buf := bufio.NewWriter(file)
 			buf.WriteString("\n")
-			_, err = buf.WriteString(text)
+			_, err = buf.WriteString(group)
 			if nil == err {
 				err = buf.Flush()
 				if nil == err {
-					log.Info.Println("FileWork Discover", text)
+					log.Info.Println("FileWork Discover", group)
 					return true
 				} else {
-					log.Error.Println("FileWork Discover", text, err)
+					log.Error.Println("FileWork Discover", group, err)
 				}
 			} else {
-				log.Error.Println("FileWork Discover", text, err)
+				log.Error.Println("FileWork Discover", group, err)
 			}
 		} else {
-			log.Error.Println("FileWork Discover", text, err)
+			log.Error.Println("FileWork Discover", group, err)
 		}
 	}
 
@@ -306,25 +307,38 @@ func (this *FileWork) Discover(group string, key string) bool {
 }
 
 func (this *FileWork) RARFileMD5() string {
-	if "" == this.rarFileMD5 {
-		content := this.DownloadRARFile()
-		if content != nil {
-			this.rarFileMD5 = fmt.Sprintf("%x", md5.Sum(content))
-		}
-	}
-
-	return this.rarFileMD5
+	return this.rar2MD5
 }
 
-func (this *FileWork) DownloadRARFile() []byte {
-	if nil == this.rarFile {
-		content, err := ioutil.ReadFile(ResourcePath + RARFile)
-		if err == nil {
-			this.rarFile = content
-		} else {
-			log.Error.Println("FileWork DownloadRARFile", err)
+func (this *FileWork) ProgramFileMD5() string {
+	return this.programMD5
+}
+
+func (this *FileWork) DownloadFile(md5 string) []byte {
+	return this.file[md5]
+}
+
+func (this *FileWork) LoadFile() {
+	names := []string{RARFile, ProgramFile}
+	for _, name := range names {
+		content := this.ReadFile(name)
+		if nil != content {
+			this.file[fmt.Sprintf("%x", md5.Sum(content))] = content
+			if name == RARFile {
+				this.rar2MD5 = fmt.Sprintf("%x", md5.Sum(content))
+			} else if name == ProgramFile {
+				this.programMD5 = fmt.Sprintf("%x", md5.Sum(content))
+			}
 		}
 	}
+}
 
-	return this.rarFile
+func (this *FileWork) ReadFile(path string) []byte {
+	content, err := ioutil.ReadFile(path)
+	if err == nil {
+		return content
+	} else {
+		log.Error.Println("FileWork ReadFile", path, err)
+		return nil
+	}
 }
