@@ -32,7 +32,7 @@ type File struct {
 
 const (
 	PasswordPath = "./data/"
-	Test         = "test.txt"
+	Test         = "./test.txt"
 	Pwd          = ".pwd"
 	Waiting      = ".waiting"
 	Confirming   = ".confirming"
@@ -83,7 +83,7 @@ func (this *FileWork) Test() *File {
 		Text: "",
 	}
 
-	text, err := ioutil.ReadFile(PasswordPath + Test)
+	text, err := ioutil.ReadFile(Test)
 	if nil == err {
 		file.Text = string(text)
 	}
