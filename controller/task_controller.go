@@ -45,6 +45,7 @@ func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun["/task-gen-file"] = GenFile
 	fun["/task-download-file"] = DownloadRARFile
 	fun["/mining-info"] = MiningInfo
+	fun["/mining-result"] = MiningResult
 	fun["/mining-run-report"] = MiningRunReport
 	fun["/mining-run-state"] = MiningRunState
 
@@ -110,6 +111,10 @@ func MiningInfo(response http.ResponseWriter, request *http.Request) {
 		}
 	}
 	response.Write(dto.Success().SetData(taskInfo).Bytes())
+}
+
+func MiningResult(response http.ResponseWriter, request *http.Request) {
+	response.Write(dto.Success().SetData(variable.FileWork.Result()).Bytes())
 }
 
 func MiningRunReport(response http.ResponseWriter, request *http.Request) {

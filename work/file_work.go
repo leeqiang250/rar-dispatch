@@ -22,6 +22,7 @@ type FileWork struct {
 	rar2MD5    string
 	programMD5 string
 	file       map[string][]byte
+	result     map[string]bool
 }
 
 type File struct {
@@ -52,6 +53,7 @@ func NewFileWork() *FileWork {
 	work := FileWork{}
 	work.data = make(map[string]int64)
 	work.file = make(map[string][]byte)
+	work.result = make(map[string]bool)
 	work.LoadFile()
 	return &work
 }
@@ -221,6 +223,10 @@ func (this *FileWork) CancelAll() {
 							log.Error.Println("FileWork CancelAll", group, err)
 						}
 					}
+				} else if strings.HasSuffix(group, Right) {
+					this.mutex.Lock()
+					this.result[group] = true
+					this.mutex.Unlock()
 				}
 			}
 		}
@@ -321,7 +327,7 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 
 func (this *FileWork) GenFile() {
 	group := uuid.NewV4().String()
-	file, err := os.OpenFile(PasswordPath+group+Tmp, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0666)
+	file, err := os.OpenFile(PasswordPath+group+Tmp, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0777)
 	if nil == err {
 		defer file.Close()
 
@@ -346,36 +352,43 @@ func (this *FileWork) GenFile() {
 
 func (this *FileWork) Discover(group string) bool {
 	if "" != group {
-		err := os.Rename(PasswordPath+group+Processing, PasswordPath+group+Right)
+		this.mutex.Lock()
+		this.result[group] = true
+		this.mutex.Unlock()
+
+		log.Info.Println("FileWork Discover", group)
+
+		text, err := ioutil.ReadFile(PasswordPath + group + Processing)
 		if nil == err {
-			name := "./" + group
-			file, err := os.OpenFile(name, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0666)
+			file, err := os.OpenFile(PasswordPath+group+Right, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0777)
 			if nil == err {
 				defer file.Close()
 
 				buf := bufio.NewWriter(file)
-				buf.WriteString("\n")
-				_, err = buf.WriteString(group)
-				if nil == err {
-					err = buf.Flush()
-					if nil == err {
-						log.Info.Println("FileWork Discover", group)
-						return true
-					} else {
-						log.Error.Println("FileWork Discover", group, err)
-					}
-				} else {
-					log.Error.Println("FileWork Discover", group, err)
-				}
+				buf.Write(text)
+				buf.Flush()
+
+				return true
 			} else {
-				log.Error.Println("FileWork Discover", group, err)
+				log.Error.Println("FileWork Discover", err)
 			}
 		} else {
-			log.Error.Println("FileWork Discover", group, err)
+			log.Error.Println("FileWork Discover", err)
 		}
 	}
 
 	return false
+}
+
+func (this *FileWork) Result() []string {
+	result := make([]string, 0)
+	this.mutex.Lock()
+	for k, _ := range this.result {
+		result = append(result, k)
+	}
+	this.mutex.Unlock()
+
+	return result
 }
 
 func (this *FileWork) RARFileMD5() string {

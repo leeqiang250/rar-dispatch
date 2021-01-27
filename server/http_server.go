@@ -10,7 +10,7 @@ import (
 )
 
 func Run() {
-	http.Handle("/resource-file/", http.StripPrefix("/resource-file/", http.FileServer(http.Dir("/resource"))))
+	http.Handle("/file/", http.StripPrefix("/file/", http.FileServer(http.Dir("./"))))
 
 	for k, v := range controller.TaskInit() {
 		http.HandleFunc(k, v)
