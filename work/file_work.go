@@ -36,6 +36,7 @@ const (
 	Confirming   = ".confirming"
 	Processing   = ".processing"
 	Complete     = ".complete"
+	Right        = ".right"
 	Tmp          = ".tmp"
 
 	Key              = ".key"
@@ -71,6 +72,13 @@ func (this *FileWork) Run() {
 	//		}
 	//	}
 	//}()
+}
+
+func (this *FileWork) Test() *File {
+	return &File{
+		Name: uuid.NewV4().String(),
+		Text: "1,2",
+	}
 }
 
 func (this *FileWork) Get() *File {
@@ -274,10 +282,20 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 
 	total := waiting + confirming + processing + complete
 
-	waitingPercent := (waiting * 100) / total
-	confirmingPercent := (confirming * 100) / total
-	processingPercent := (processing * 100) / total
-	completePercent := 100 - waitingPercent - confirmingPercent - processingPercent
+	waitingPercent := 0
+	confirmingPercent := 0
+	processingPercent := 0
+	completePercent := 0
+	if total > 0 {
+		waitingPercent = (waiting * 100) / total
+		confirmingPercent = (confirming * 100) / total
+		processingPercent = (processing * 100) / total
+		completePercent = 100 - waitingPercent - confirmingPercent - processingPercent
+	}
+	//waitingPercent := (waiting * 100) / total
+	//confirmingPercent := (confirming * 100) / total
+	//processingPercent := (processing * 100) / total
+	//completePercent := 100 - waitingPercent - confirmingPercent - processingPercent
 
 	data := make(map[string]interface{})
 	data["total"] = total
@@ -320,19 +338,24 @@ func (this *FileWork) GenFile() {
 
 func (this *FileWork) Discover(group string) bool {
 	if "" != group {
-		name := "./" + group
-		file, err := os.OpenFile(name, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0666)
+		err := os.Rename(PasswordPath+group+Processing, PasswordPath+group+Right)
 		if nil == err {
-			defer file.Close()
-
-			buf := bufio.NewWriter(file)
-			buf.WriteString("\n")
-			_, err = buf.WriteString(group)
+			name := "./" + group
+			file, err := os.OpenFile(name, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0666)
 			if nil == err {
-				err = buf.Flush()
+				defer file.Close()
+
+				buf := bufio.NewWriter(file)
+				buf.WriteString("\n")
+				_, err = buf.WriteString(group)
 				if nil == err {
-					log.Info.Println("FileWork Discover", group)
-					return true
+					err = buf.Flush()
+					if nil == err {
+						log.Info.Println("FileWork Discover", group)
+						return true
+					} else {
+						log.Error.Println("FileWork Discover", group, err)
+					}
 				} else {
 					log.Error.Println("FileWork Discover", group, err)
 				}

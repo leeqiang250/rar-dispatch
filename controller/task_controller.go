@@ -35,6 +35,7 @@ type TaskInfo struct {
 
 func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun := make(map[string]func(http.ResponseWriter, *http.Request))
+	fun["/task-test"] = Get
 	fun["/task-get"] = Get
 	fun["/task-confirm"] = Confirm
 	fun["/task-complete"] = Complete
@@ -50,6 +51,10 @@ func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	go checkThread()
 
 	return fun
+}
+
+func Test(response http.ResponseWriter, request *http.Request) {
+	response.Write(dto.Success().SetData(variable.FileWork.Test()).Bytes())
 }
 
 func Get(response http.ResponseWriter, request *http.Request) {
