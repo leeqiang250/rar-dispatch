@@ -31,6 +31,7 @@ type File struct {
 
 const (
 	PasswordPath = "./data/"
+	Test         = "test.txt"
 	Pwd          = ".pwd"
 	Waiting      = ".waiting"
 	Confirming   = ".confirming"
@@ -75,10 +76,17 @@ func (this *FileWork) Run() {
 }
 
 func (this *FileWork) Test() *File {
-	return &File{
+	file := File{
 		Name: uuid.NewV4().String(),
-		Text: "1,2",
+		Text: "",
 	}
+
+	text, err := ioutil.ReadFile(PasswordPath + Test)
+	if nil == err {
+		file.Text = string(text)
+	}
+
+	return &file
 }
 
 func (this *FileWork) Get() *File {

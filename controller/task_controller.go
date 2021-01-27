@@ -35,7 +35,7 @@ type TaskInfo struct {
 
 func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun := make(map[string]func(http.ResponseWriter, *http.Request))
-	fun["/task-test"] = Get
+	fun["/task-test"] = Test
 	fun["/task-get"] = Get
 	fun["/task-confirm"] = Confirm
 	fun["/task-complete"] = Complete
