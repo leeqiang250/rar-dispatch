@@ -32,6 +32,7 @@ type File struct {
 
 const (
 	PasswordPath = "./data/"
+	CompletePath = "./complete/"
 	Test         = "./test.txt"
 	Pwd          = ".pwd"
 	Waiting      = ".waiting"
@@ -45,6 +46,8 @@ const (
 	RARFile          = "./data.rar"
 	ProgramFileLinux = "./unrarlinux"
 	ProgramFileMacOS = "./unrarmacos"
+
+	StandardFileSize = 1024 * 1024
 
 	FileStateWaitingInterval = int64(1000 * 60)
 )
@@ -63,6 +66,15 @@ func (this *FileWork) Run() {
 
 	go func() {
 		for {
+			files, err := ioutil.ReadDir(PasswordPath)
+			if nil == err {
+				for _, file := range files {
+					if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && !this.isSmallSize(file) {
+						this.SplitFile(file.Name())
+					}
+				}
+			}
+
 			this.Cancel()
 			time2.Sleep(time2.Minute)
 		}
@@ -96,11 +108,12 @@ func (this *FileWork) Get() *File {
 	if nil == err {
 		group := ""
 		for _, file := range files {
-			if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) {
+			if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
 				group = file.Name()
 				break
 			}
 		}
+
 		if "" != group {
 			text, err := ioutil.ReadFile(PasswordPath + group)
 			if nil == err {
@@ -149,7 +162,7 @@ func (this *FileWork) Confirm(group string) bool {
 }
 
 func (this *FileWork) Complete(group string) bool {
-	err := os.Rename(PasswordPath+group+Processing, PasswordPath+group+Complete)
+	err := os.Rename(PasswordPath+group+Processing, CompletePath+group+Complete)
 	if nil == err {
 		log.Info.Println("FileWork Complete", group)
 	} else {
@@ -159,7 +172,7 @@ func (this *FileWork) Complete(group string) bool {
 	return nil == err
 }
 
-func (this *FileWork) ProductFile() bool {
+func (this *FileWork) ProduceFile() bool {
 	result := false
 	files, err := ioutil.ReadDir(PasswordPath)
 	if nil == err {
@@ -169,7 +182,6 @@ func (this *FileWork) ProductFile() bool {
 				if strings.HasSuffix(group, Pwd) {
 					group = file.Name()[:len(group)-len(Pwd)]
 					if "" != group {
-
 						err := os.Rename(PasswordPath+file.Name(), PasswordPath+group)
 						if nil == err {
 							log.Info.Println("FileWork CancelAll", group)
@@ -192,7 +204,6 @@ func (this *FileWork) Cancel() {
 	ts := time.TimestampNowMs()
 
 	this.mutex.Lock()
-	defer this.mutex.Unlock()
 
 	for k, v := range this.data {
 		if (ts - v) > FileStateWaitingInterval {
@@ -205,6 +216,8 @@ func (this *FileWork) Cancel() {
 			}
 		}
 	}
+
+	this.mutex.Unlock()
 }
 
 func (this *FileWork) CancelAll() {
@@ -333,10 +346,11 @@ func (this *FileWork) GenFile() {
 
 		buf := bufio.NewWriter(file)
 
-		content := 3000
+		content := StandardFileSize
 		for content > 0 {
 			content--
-			buf.WriteString("," + strconv.Itoa(content))
+			buf.WriteString("," + strconv.Itoa(content) + strconv.Itoa(content))
+			buf.Flush()
 		}
 
 		buf.Flush()
@@ -431,4 +445,90 @@ func (this *FileWork) ReadFile(path string) []byte {
 		log.Error.Println("FileWork ReadFile", path, err)
 		return nil
 	}
+}
+
+func (this *FileWork) isSmallSize(file os.FileInfo) bool {
+	return (StandardFileSize * 2) > file.Size()
+}
+
+func (this *FileWork) SplitFile(filename string) {
+	text, err := ioutil.ReadFile(PasswordPath + filename)
+	if nil == err {
+		char := ([]byte(","))[0]
+		l := len(text)
+		count := 0
+		data := make([]byte, 0, StandardFileSize)
+
+		for i := 0; i < l; i++ {
+			if text[i] == char && len(data) >= StandardFileSize {
+				for {
+					if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+filename, data) {
+						count++
+						data = make([]byte, 0, StandardFileSize)
+						break
+					} else {
+						time2.Sleep(time2.Second)
+					}
+				}
+			} else {
+				data = append(data, text[i])
+			}
+		}
+		if 0 < len(data) {
+			for {
+				if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+filename, data) {
+					count++
+					data = make([]byte, 0, StandardFileSize)
+					break
+				} else {
+					time2.Sleep(time2.Second)
+				}
+			}
+		}
+		os.Remove(PasswordPath + filename)
+	} else {
+		log.Error.Println("FileWork SplitFile", err)
+	}
+}
+
+func (this *FileWork) WriteFile(filepath string, data []byte) bool {
+	file, err := os.OpenFile(filepath+Tmp, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0777)
+	if nil != err {
+		log.Error.Println("FileWork WriteFile", err)
+		return false
+	}
+
+	defer file.Close()
+
+	buf := bufio.NewWriter(file)
+
+	_, err = buf.Write(data)
+	if nil != err {
+		os.Remove(filepath + Tmp)
+		log.Error.Println("FileWork WriteFile", err)
+		return false
+	}
+
+	err = buf.Flush()
+	if nil != err {
+		os.Remove(filepath + Tmp)
+		log.Error.Println("FileWork WriteFile", err)
+		return false
+	}
+
+	err = file.Close()
+	if nil != err {
+		os.Remove(filepath + Tmp)
+		log.Error.Println("FileWork WriteFile", err)
+		return false
+	}
+
+	err = os.Rename(filepath+Tmp, filepath)
+	if nil != err {
+		os.Remove(filepath + Tmp)
+		log.Error.Println("FileWork WriteFile", err)
+		return false
+	}
+
+	return true
 }
