@@ -33,6 +33,7 @@ type File struct {
 const (
 	PasswordPath = "./data/"
 	CompletePath = "./complete/"
+	LogPath      = "./log/"
 	Test         = "./test.txt"
 	Pwd          = ".pwd"
 	Waiting      = ".waiting"
@@ -63,6 +64,24 @@ func NewFileWork() *FileWork {
 
 func (this *FileWork) Run() {
 	this.CancelAll()
+
+	{
+		err := os.Mkdir(PasswordPath, 0777)
+		if nil != err && !os.IsExist(err) {
+			log.Error.Println("os.Mkdir", err)
+			os.Exit(0)
+		}
+		err = os.Mkdir(CompletePath, 0777)
+		if nil != err && !os.IsExist(err) {
+			log.Error.Println("os.Mkdir", err)
+			os.Exit(0)
+		}
+		err = os.Mkdir(LogPath, 0777)
+		if nil != err && !os.IsExist(err) {
+			log.Error.Println("os.Mkdir", err)
+			os.Exit(0)
+		}
+	}
 
 	go func() {
 		for {
