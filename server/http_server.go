@@ -1,9 +1,9 @@
 package server
 
 import (
+	"dispatch/conf"
 	"dispatch/controller"
 	"dispatch/log"
-	"dispatch/variable"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,10 +16,10 @@ func Run() {
 		http.HandleFunc(k, v)
 	}
 
-	fmt.Println("starting dispatch at port", variable.Conf.App.Port)
-	log.Info.Println("starting dispatch at port", variable.Conf.App.Port)
+	fmt.Println("starting dispatch at port", conf.Conf.App.Port)
+	log.Info.Println("starting dispatch at port", conf.Conf.App.Port)
 
-	err := http.ListenAndServe(":"+variable.Conf.App.Port, nil)
+	err := http.ListenAndServe(":"+conf.Conf.App.Port, nil)
 	if err != nil {
 		log.Error.Println("ListenAndServe: ", err)
 		os.Exit(0)

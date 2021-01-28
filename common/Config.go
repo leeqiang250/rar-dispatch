@@ -16,8 +16,9 @@ type Config struct {
 		Port string `yaml:"port"`
 	}
 
-	CoreThreadCount int `yaml:"core-thread-count"`
-	ReportInterval  int `yaml:"report-interval"`
+	CoreThreadCount  int `yaml:"core-thread-count"`
+	ReportInterval   int `yaml:"report-interval"`
+	StandardFileSize int `yaml:"standard-file-size"`
 }
 
 func ConfigInit() *Config {
@@ -33,5 +34,10 @@ func ConfigInit() *Config {
 		log.Error.Println("Config File", Path, err)
 		os.Exit(0)
 	}
+
+	if conf.StandardFileSize < 1 {
+		conf.StandardFileSize = 10240
+	}
+
 	return &conf
 }

@@ -3,3 +3,4 @@ app:
 
 core-thread-count: 3
 report-interval: 1000
+standard-file-size: 10240

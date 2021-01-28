@@ -3,6 +3,7 @@ package work
 import (
 	"bufio"
 	"crypto/md5"
+	"dispatch/conf"
 	"dispatch/log"
 	"dispatch/time"
 	"fmt"
@@ -48,8 +49,6 @@ const (
 	RARFile          = "./data.rar"
 	ProgramFileLinux = "./unrarlinux"
 	ProgramFileMacOS = "./unrarmacos"
-
-	StandardFileSize = 1024 * 100
 
 	FileStateWaitingInterval = int64(1000 * 60)
 )
@@ -364,7 +363,7 @@ func (this *FileWork) GenFile() {
 
 		buf := bufio.NewWriter(file)
 
-		content := StandardFileSize
+		content := conf.Conf.StandardFileSize
 		for content > 0 {
 			content--
 			buf.WriteString("," + strconv.Itoa(content) + strconv.Itoa(content))
@@ -491,7 +490,7 @@ func (this *FileWork) ReadFile(path string) []byte {
 }
 
 func (this *FileWork) isSmallSize(file os.FileInfo) bool {
-	return (StandardFileSize * 2) > file.Size()
+	return int64(conf.Conf.StandardFileSize*2) > file.Size()
 }
 
 func (this *FileWork) SplitFile() {
@@ -505,14 +504,14 @@ func (this *FileWork) SplitFile() {
 					char := ([]byte(","))[0]
 					l := len(text)
 					count := 0
-					data := make([]byte, 0, StandardFileSize)
+					data := make([]byte, 0, conf.Conf.StandardFileSize)
 
 					for i := 0; i < l; i++ {
-						if text[i] == char && len(data) >= StandardFileSize {
+						if text[i] == char && len(data) >= conf.Conf.StandardFileSize {
 							for {
 								if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+file.Name(), data) {
 									count++
-									data = make([]byte, 0, StandardFileSize)
+									data = make([]byte, 0, conf.Conf.StandardFileSize)
 									break
 								} else {
 									time2.Sleep(time2.Second)
@@ -526,7 +525,7 @@ func (this *FileWork) SplitFile() {
 						for {
 							if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+file.Name(), data) {
 								count++
-								data = make([]byte, 0, StandardFileSize)
+								data = make([]byte, 0, conf.Conf.StandardFileSize)
 								break
 							} else {
 								time2.Sleep(time2.Second)

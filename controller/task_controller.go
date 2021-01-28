@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"dispatch/conf"
 	"dispatch/dto"
 	"dispatch/time"
 	"dispatch/variable"
@@ -108,8 +109,8 @@ func MiningInfo(response http.ResponseWriter, request *http.Request) {
 	if nil == taskInfo {
 		taskInfo = &TaskInfo{
 			OS:              runtime.GOOS,
-			CoreThreadCount: variable.Conf.CoreThreadCount,
-			ReportInterval:  variable.Conf.ReportInterval,
+			CoreThreadCount: conf.Conf.CoreThreadCount,
+			ReportInterval:  conf.Conf.ReportInterval,
 			RarFilePath:     "./f",
 			RarFilePathMD5:  variable.FileWork.RARFileMD5(),
 			ProgramPath:     "./u",

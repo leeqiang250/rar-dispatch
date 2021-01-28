@@ -2,6 +2,7 @@ package main
 
 import (
 	"dispatch/common"
+	"dispatch/conf"
 	"dispatch/log"
 	"dispatch/server"
 	"dispatch/variable"
@@ -10,7 +11,7 @@ import (
 func main() {
 	log.Init("./log", 4)
 
-	variable.Conf = common.ConfigInit()
+	conf.Conf = common.ConfigInit()
 
 	variable.FileWork.Run()
 
