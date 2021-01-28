@@ -422,6 +422,15 @@ func (this *FileWork) Cancel(group string) bool {
 			log.Error.Println("FileWork Cancel", group, err)
 		}
 
+		err = os.Rename(PasswordPath+group+Confirming, PasswordPath+group)
+		if nil != err {
+			log.Error.Println("FileWork Cancel", group, err)
+		}
+
+		this.mutex.Lock()
+		delete(this.data, group)
+		this.mutex.Unlock()
+
 		return nil == err
 	}
 
