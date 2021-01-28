@@ -48,7 +48,7 @@ const (
 	ProgramFileLinux = "./unrarlinux"
 	ProgramFileMacOS = "./unrarmacos"
 
-	StandardFileSize = 1024 * 1024
+	StandardFileSize = 1024 * 100
 
 	FileStateWaitingInterval = int64(1000 * 60)
 )

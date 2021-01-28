@@ -67,6 +67,7 @@ func Confirm(response http.ResponseWriter, request *http.Request) {
 }
 
 func Complete(response http.ResponseWriter, request *http.Request) {
+	removeThread(request.URL.Query().Get("ip"), request.URL.Query().Get("group"))
 	response.Write(dto.Success().SetData(variable.FileWork.Complete(request.URL.Query().Get("group"))).Bytes())
 }
 
@@ -159,7 +160,6 @@ func checkThread() {
 func addThread(ip string, group string, index string) {
 	if "" != ip && "" != group {
 		threadMutex.Lock()
-		defer threadMutex.Unlock()
 		groups, ok := thread[ip]
 		if !ok {
 			thread[ip] = make(map[string]*RunInfo)
@@ -167,21 +167,22 @@ func addThread(ip string, group string, index string) {
 		}
 		info, ok := groups[group]
 		if !ok {
-			groups[group] = &RunInfo{
-				Key: "",
-				Ts:  0,
-			}
+			groups[group] = &RunInfo{}
 			info, _ = groups[group]
 		}
 		info.Key = index
 		info.Ts = time.TimestampNowMs()
+		threadMutex.Unlock()
 	}
 }
 
-func removeThread(name string) {
-	if "" != name {
+func removeThread(ip string, group string) {
+	if "" != ip && "" != group {
 		threadMutex.Lock()
-		defer threadMutex.Unlock()
-		delete(thread, name)
+		groups, ok := thread[ip]
+		if ok {
+			delete(groups, group)
+		}
+		threadMutex.Unlock()
 	}
 }
