@@ -162,6 +162,11 @@ func (this *FileWork) Confirm(group string) bool {
 }
 
 func (this *FileWork) Complete(group string) bool {
+	if !this.IsExist(PasswordPath + group + Processing) {
+		log.Error.Println("FileWork Complete", group)
+		return true
+	}
+
 	err := os.Rename(PasswordPath+group+Processing, CompletePath+group+Complete)
 	if nil == err {
 		log.Info.Println("FileWork Complete", group)
@@ -372,13 +377,19 @@ func (this *FileWork) Discover(group string) bool {
 
 		log.Info.Println("FileWork Discover", group)
 
+		if !this.IsExist(PasswordPath + group + Processing) {
+			log.Error.Println("FileWork Discover", group)
+			return true
+		}
+
 		text, err := ioutil.ReadFile(PasswordPath + group + Processing)
 		if nil == err {
-			file, err := os.OpenFile(PasswordPath+group+Right, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0777)
+			file, err := os.OpenFile("./"+group+Right, os.O_WRONLY|os.O_RDONLY|os.O_CREATE|os.O_APPEND, 0777)
 			if nil == err {
 				defer file.Close()
 
 				buf := bufio.NewWriter(file)
+				buf.WriteString("\n")
 				buf.Write(text)
 				buf.Flush()
 
@@ -531,4 +542,13 @@ func (this *FileWork) WriteFile(filepath string, data []byte) bool {
 	}
 
 	return true
+}
+
+func (this *FileWork) IsExist(file string) bool {
+	_, err := os.Stat(file)
+	if nil != err {
+		log.Error.Println("FileWork IsExist", file, err)
+	}
+
+	return nil == err
 }
