@@ -17,12 +17,13 @@ import (
 )
 
 type FileWork struct {
-	mutex      sync.Mutex
-	data       map[string]int64
-	rar2MD5    string
-	programMD5 string
-	file       map[string][]byte
-	result     map[string]bool
+	mutex          sync.Mutex
+	fileSplitMutex sync.Mutex
+	data           map[string]int64
+	rar2MD5        string
+	programMD5     string
+	file           map[string][]byte
+	result         map[string]bool
 }
 
 type File struct {
@@ -63,8 +64,6 @@ func NewFileWork() *FileWork {
 }
 
 func (this *FileWork) Run() {
-	this.CancelAll()
-
 	{
 		err := os.Mkdir(PasswordPath, 0777)
 		if nil != err && !os.IsExist(err) {
@@ -83,18 +82,11 @@ func (this *FileWork) Run() {
 		}
 	}
 
+	this.CancelAll()
+
 	go func() {
 		for {
-			files, err := ioutil.ReadDir(PasswordPath)
-			if nil == err {
-				for _, file := range files {
-					if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && !this.isSmallSize(file) {
-						this.SplitFile(file.Name())
-					}
-				}
-			}
-
-			this.Cancel()
+			this.CheckAndCancel()
 			time2.Sleep(time2.Minute)
 		}
 	}()
@@ -124,7 +116,7 @@ func (this *FileWork) Test() *File {
 
 func (this *FileWork) Get() *File {
 	files, err := ioutil.ReadDir(PasswordPath)
-	if nil == err {
+	if nil == err && len(files) > 0 {
 		group := ""
 		for _, file := range files {
 			if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
@@ -133,7 +125,9 @@ func (this *FileWork) Get() *File {
 			}
 		}
 
-		if "" != group {
+		if "" == group {
+			go this.SplitFile()
+		} else {
 			text, err := ioutil.ReadFile(PasswordPath + group)
 			if nil == err {
 				err = os.Rename(PasswordPath+group, PasswordPath+group+Confirming)
@@ -199,7 +193,7 @@ func (this *FileWork) Complete(group string) bool {
 func (this *FileWork) ProduceFile() bool {
 	result := false
 	files, err := ioutil.ReadDir(PasswordPath)
-	if nil == err {
+	if nil == err && len(files) > 0 {
 		for _, file := range files {
 			if !file.IsDir() {
 				group := file.Name()
@@ -224,7 +218,7 @@ func (this *FileWork) ProduceFile() bool {
 	return result
 }
 
-func (this *FileWork) Cancel() {
+func (this *FileWork) CheckAndCancel() {
 	ts := time.TimestampNowMs()
 
 	this.mutex.Lock()
@@ -246,7 +240,7 @@ func (this *FileWork) Cancel() {
 
 func (this *FileWork) CancelAll() {
 	files, err := ioutil.ReadDir(PasswordPath)
-	if nil == err {
+	if nil == err && len(files) > 0 {
 		for _, file := range files {
 			if !file.IsDir() {
 				group := file.Name()
@@ -279,7 +273,7 @@ func (this *FileWork) FileInfo() map[string]map[string]int64 {
 	complete := make(map[string]int64)
 
 	files, err := ioutil.ReadDir(PasswordPath)
-	if nil == err {
+	if nil == err && len(files) > 0 {
 		for _, file := range files {
 			if !file.IsDir() {
 				if strings.HasSuffix(file.Name(), Waiting) {
@@ -313,7 +307,7 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 	complete := 0
 
 	files, err := ioutil.ReadDir(PasswordPath)
-	if nil == err {
+	if nil == err && len(files) > 0 {
 		for _, file := range files {
 			if !file.IsDir() {
 				if strings.HasSuffix(file.Name(), Waiting) {
@@ -421,6 +415,19 @@ func (this *FileWork) Discover(group string) bool {
 	return false
 }
 
+func (this *FileWork) Cancel(group string) bool {
+	if "" != group {
+		err := os.Rename(PasswordPath+group+Processing, PasswordPath+group)
+		if nil != err {
+			log.Error.Println("FileWork Cancel", group, err)
+		}
+
+		return nil == err
+	}
+
+	return false
+}
+
 func (this *FileWork) Result() []string {
 	result := make([]string, 0)
 	this.mutex.Lock()
@@ -478,44 +485,55 @@ func (this *FileWork) isSmallSize(file os.FileInfo) bool {
 	return (StandardFileSize * 2) > file.Size()
 }
 
-func (this *FileWork) SplitFile(filename string) {
-	text, err := ioutil.ReadFile(PasswordPath + filename)
-	if nil == err {
-		char := ([]byte(","))[0]
-		l := len(text)
-		count := 0
-		data := make([]byte, 0, StandardFileSize)
+func (this *FileWork) SplitFile() {
+	this.fileSplitMutex.Lock()
+	files, err := ioutil.ReadDir(PasswordPath)
+	if nil == err && len(files) > 0 {
+		for _, file := range files {
+			if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && !this.isSmallSize(file) {
+				text, err := ioutil.ReadFile(PasswordPath + file.Name())
+				if nil == err {
+					char := ([]byte(","))[0]
+					l := len(text)
+					count := 0
+					data := make([]byte, 0, StandardFileSize)
 
-		for i := 0; i < l; i++ {
-			if text[i] == char && len(data) >= StandardFileSize {
-				for {
-					if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+filename, data) {
-						count++
-						data = make([]byte, 0, StandardFileSize)
-						break
-					} else {
-						time2.Sleep(time2.Second)
+					for i := 0; i < l; i++ {
+						if text[i] == char && len(data) >= StandardFileSize {
+							for {
+								if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+file.Name(), data) {
+									count++
+									data = make([]byte, 0, StandardFileSize)
+									break
+								} else {
+									time2.Sleep(time2.Second)
+								}
+							}
+						} else {
+							data = append(data, text[i])
+						}
 					}
-				}
-			} else {
-				data = append(data, text[i])
-			}
-		}
-		if 0 < len(data) {
-			for {
-				if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+filename, data) {
-					count++
-					data = make([]byte, 0, StandardFileSize)
-					break
+					if 0 < len(data) {
+						for {
+							if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+file.Name(), data) {
+								count++
+								data = make([]byte, 0, StandardFileSize)
+								break
+							} else {
+								time2.Sleep(time2.Second)
+							}
+						}
+					}
+					os.Remove(PasswordPath + file.Name())
 				} else {
-					time2.Sleep(time2.Second)
+					log.Error.Println("FileWork SplitFile", err)
 				}
+
+				break
 			}
 		}
-		os.Remove(PasswordPath + filename)
-	} else {
-		log.Error.Println("FileWork SplitFile", err)
 	}
+	this.fileSplitMutex.Unlock()
 }
 
 func (this *FileWork) WriteFile(filepath string, data []byte) bool {

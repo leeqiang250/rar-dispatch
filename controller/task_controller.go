@@ -40,6 +40,7 @@ func TaskInit() map[string]func(http.ResponseWriter, *http.Request) {
 	fun["/task-confirm"] = Confirm
 	fun["/task-complete"] = Complete
 	fun["/task-discover"] = Discover
+	fun["/task-cancel"] = Cancel
 	fun["/task-file-info"] = FileInfo
 	fun["/task-file-info-over-view"] = FileInfoOverView
 	fun["/task-gen-file"] = GenFile
@@ -73,6 +74,10 @@ func Complete(response http.ResponseWriter, request *http.Request) {
 
 func Discover(response http.ResponseWriter, request *http.Request) {
 	response.Write(dto.Success().SetData(variable.FileWork.Discover(request.URL.Query().Get("group"))).Bytes())
+}
+
+func Cancel(response http.ResponseWriter, request *http.Request) {
+	response.Write(dto.Success().SetData(variable.FileWork.Cancel(request.URL.Query().Get("group"))).Bytes())
 }
 
 func FileInfo(response http.ResponseWriter, request *http.Request) {
