@@ -366,7 +366,7 @@ func (this *FileWork) GenFile() {
 		content := conf.Conf.StandardFileSize
 		for content > 0 {
 			content--
-			buf.WriteString("," + strconv.Itoa(content) + strconv.Itoa(content))
+			buf.WriteString("," + strconv.Itoa(content))
 			buf.Flush()
 		}
 
