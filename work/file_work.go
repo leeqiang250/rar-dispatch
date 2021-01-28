@@ -377,10 +377,7 @@ func (this *FileWork) Discover(group string) bool {
 
 		log.Info.Println("FileWork Discover", group)
 
-		if !this.IsExist(PasswordPath + group + Processing) {
-			log.Error.Println("FileWork Discover", group)
-			return true
-		}
+		this.IsExist(PasswordPath + group + Processing)
 
 		text, err := ioutil.ReadFile(PasswordPath + group + Processing)
 		if nil == err {
