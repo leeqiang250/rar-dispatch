@@ -14,14 +14,25 @@ import (
 
 var (
 	threadMutex sync.Mutex
-	thread      = make(map[string]map[string]*RunInfo)
+	thread      = make(map[string]*ServerRunInfo2)
 	taskInfo    *TaskInfo
 	interval    = int64(1000 * 60)
 )
 
-type RunInfo struct {
-	Key string `json:"key"`
-	Ts  int64  `json:"ts"`
+type GroupRunInfo struct {
+	Group string `json:"group"`
+	Ts    int64  `json:"ts"`
+}
+
+type ServerRunInfo2 struct {
+	ServerRunInfo1
+	GroupRunInfo map[string]*GroupRunInfo `json:"group-run-info"`
+}
+
+type ServerRunInfo1 struct {
+	TotalPWD int64 `json:"total-pwd"`
+	TotalTs  int64 `json:"total-ts"`
+	Speed    int64 `json:"speed"`
 }
 
 type TaskInfo struct {
@@ -69,7 +80,13 @@ func Confirm(response http.ResponseWriter, request *http.Request) {
 }
 
 func Complete(response http.ResponseWriter, request *http.Request) {
-	removeThread(request.URL.Query().Get("ip"), request.URL.Query().Get("group"))
+	size, errSize := strconv.ParseInt(request.URL.Query().Get("size"), 10, 64)
+	ts, errTs := strconv.ParseInt(request.URL.Query().Get("ts"), 10, 64)
+	if nil != errSize || nil != errTs {
+		size = 0
+		ts = 0
+	}
+	removeThread(request.URL.Query().Get("ip"), request.URL.Query().Get("group"), size, ts)
 	response.Write(dto.Success().SetData(variable.FileWork.Complete(request.URL.Query().Get("group"))).Bytes())
 }
 
@@ -130,17 +147,29 @@ func MiningRunReport(response http.ResponseWriter, request *http.Request) {
 }
 
 func MiningRunState(response http.ResponseWriter, request *http.Request) {
+	detail := request.URL.Query().Get("detail")
 	data := make(map[string]interface{})
 	threadMutex.Lock()
 	ipCount := 0
 	groupCount := 0
-	for _, groups := range thread {
+	serverRunInfo1 := make(map[string]*ServerRunInfo1)
+	for ip, serverRunInfo := range thread {
 		ipCount++
-		groupCount += len(groups)
+		groupCount += len(serverRunInfo.GroupRunInfo)
+		serverRunInfo1[ip] = &ServerRunInfo1{
+			TotalPWD: serverRunInfo.TotalPWD,
+			TotalTs:  serverRunInfo.TotalTs,
+			Speed:    serverRunInfo.Speed,
+		}
 	}
-	data["server-count"] = ipCount
-	data["thread-count"] = groupCount
-	data["thread"] = thread
+	data["total-server-count"] = ipCount
+	data["total-thread-count"] = groupCount
+	if detail == "1" {
+		data["thread"] = thread
+	} else {
+		data["thread"] = serverRunInfo1
+	}
+
 	bytes := dto.Success().SetData(data).Bytes()
 	threadMutex.Unlock()
 
@@ -152,10 +181,10 @@ func checkThread() {
 		time2.Sleep(time2.Minute)
 		ts := time.TimestampNowMs()
 		threadMutex.Lock()
-		for _, groups := range thread {
-			for group, info := range groups {
+		for _, serverRunInfo := range thread {
+			for group, info := range serverRunInfo.GroupRunInfo {
 				if (ts - info.Ts) > interval {
-					delete(groups, group)
+					delete(serverRunInfo.GroupRunInfo, group)
 				}
 			}
 		}
@@ -166,29 +195,46 @@ func checkThread() {
 func addThread(ip string, group string, index string) {
 	if "" != ip && "" != group {
 		threadMutex.Lock()
-		groups, ok := thread[ip]
+		serverRunInfo, ok := thread[ip]
 		if !ok {
-			thread[ip] = make(map[string]*RunInfo)
-			groups, _ = thread[ip]
+			serverRunInfo = &ServerRunInfo2{}
+			serverRunInfo.TotalPWD = 0
+			serverRunInfo.TotalTs = 0
+			serverRunInfo.Speed = 0
+			serverRunInfo.GroupRunInfo = make(map[string]*GroupRunInfo)
+			thread[ip] = serverRunInfo
 		}
-		info, ok := groups[group]
+		groupRunInfo, ok := serverRunInfo.GroupRunInfo[group]
 		if !ok {
-			groups[group] = &RunInfo{}
-			info, _ = groups[group]
+			serverRunInfo.GroupRunInfo[group] = &GroupRunInfo{}
+			groupRunInfo, _ = serverRunInfo.GroupRunInfo[group]
 		}
-		info.Key = index
-		info.Ts = time.TimestampNowMs()
+		groupRunInfo.Group = index
+		groupRunInfo.Ts = time.TimestampNowMs()
 		threadMutex.Unlock()
 	}
 }
 
-func removeThread(ip string, group string) {
+func removeThread(ip string, group string, size int64, ts int64) {
 	if "" != ip && "" != group {
 		threadMutex.Lock()
-		groups, ok := thread[ip]
-		if ok {
-			delete(groups, group)
+		serverRunInfo, ok := thread[ip]
+		if !ok {
+			serverRunInfo = &ServerRunInfo2{}
+			serverRunInfo.TotalPWD = 0
+			serverRunInfo.TotalTs = 0
+			serverRunInfo.Speed = 0
+			serverRunInfo.GroupRunInfo = make(map[string]*GroupRunInfo)
+			thread[ip] = serverRunInfo
 		}
+		serverRunInfo.TotalPWD += size
+		serverRunInfo.TotalTs += ts
+		if serverRunInfo.TotalTs > 0 {
+			serverRunInfo.Speed = serverRunInfo.TotalPWD / serverRunInfo.TotalTs
+		} else {
+			serverRunInfo.Speed = 0
+		}
+		delete(serverRunInfo.GroupRunInfo, group)
 		threadMutex.Unlock()
 	}
 }

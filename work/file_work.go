@@ -179,14 +179,12 @@ func (this *FileWork) Complete(group string) bool {
 		return true
 	}
 
-	err := os.Rename(PasswordPath+group+Processing, CompletePath+group+Complete)
-	if nil == err {
-		log.Info.Println("FileWork Complete", group)
-	} else {
+	err := os.Remove(PasswordPath + group + Processing)
+	if nil != err {
 		log.Error.Println("FileWork Complete", group, err)
 	}
 
-	return nil == err
+	return true
 }
 
 func (this *FileWork) ProduceFile() bool {
@@ -245,6 +243,16 @@ func (this *FileWork) CancelAll() {
 				group := file.Name()
 				if strings.HasSuffix(group, Confirming) {
 					group = file.Name()[:len(group)-len(Confirming)]
+					if "" != group {
+						err := os.Rename(PasswordPath+file.Name(), PasswordPath+group)
+						if nil == err {
+							log.Info.Println("FileWork CancelAll", group)
+						} else {
+							log.Error.Println("FileWork CancelAll", group, err)
+						}
+					}
+				} else if strings.HasSuffix(group, Processing) {
+					group = file.Name()[:len(group)-len(Processing)]
 					if "" != group {
 						err := os.Rename(PasswordPath+file.Name(), PasswordPath+group)
 						if nil == err {
