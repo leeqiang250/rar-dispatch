@@ -25,6 +25,10 @@ type FileWork struct {
 	programMD5     string
 	file           map[string][]byte
 	result         map[string]bool
+
+	waiting      map[string]bool
+	waitingTmp   map[string]bool
+	waitingMutex sync.Mutex
 }
 
 type File struct {
@@ -34,14 +38,12 @@ type File struct {
 
 const (
 	PasswordPath = "./data/"
-	CompletePath = "./complete/"
 	LogPath      = "./log/"
 	Test         = "./test.txt"
 	Pwd          = ".pwd"
 	Waiting      = ".waiting"
 	Confirming   = ".confirming"
 	Processing   = ".processing"
-	Complete     = ".complete"
 	Right        = ".right"
 	Tmp          = ".tmp"
 
@@ -58,6 +60,8 @@ func NewFileWork() *FileWork {
 	work.data = make(map[string]int64)
 	work.file = make(map[string][]byte)
 	work.result = make(map[string]bool)
+	work.waiting = make(map[string]bool)
+	work.waitingTmp = make(map[string]bool)
 	work.LoadFile()
 	return &work
 }
@@ -65,11 +69,6 @@ func NewFileWork() *FileWork {
 func (this *FileWork) Run() {
 	{
 		err := os.Mkdir(PasswordPath, 0777)
-		if nil != err && !os.IsExist(err) {
-			log.Error.Println("os.Mkdir", err)
-			os.Exit(0)
-		}
-		err = os.Mkdir(CompletePath, 0777)
 		if nil != err && !os.IsExist(err) {
 			log.Error.Println("os.Mkdir", err)
 			os.Exit(0)
@@ -114,47 +113,86 @@ func (this *FileWork) Test() *File {
 }
 
 func (this *FileWork) Get() *File {
-	files, err := ioutil.ReadDir(PasswordPath)
-	if nil == err && len(files) > 0 {
-		group := ""
-		for _, file := range files {
-			if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
-				group = file.Name()
-				break
+	this.waitingMutex.Lock()
+	if 0 == len(this.waiting) {
+		this.SplitFile()
+		files, err := ioutil.ReadDir(PasswordPath)
+		if nil == err && len(files) > 0 {
+			for _, file := range files {
+				if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
+					this.waiting[file.Name()] = true
+				}
+			}
+		}
+	}
+	group := ""
+	for k, _ := range this.waiting {
+		_, ok := this.waitingTmp[k]
+		if !ok && k != "" {
+			group = k
+			break
+		}
+	}
+	if "" == group {
+		this.SplitFile()
+		files, err := ioutil.ReadDir(PasswordPath)
+		if nil == err && len(files) > 0 {
+			for _, file := range files {
+				if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
+					this.waiting[file.Name()] = true
+				}
 			}
 		}
 
-		if "" == group {
-			go this.SplitFile()
-		} else {
-			text, err := ioutil.ReadFile(PasswordPath + group)
+		for k, _ := range this.waiting {
+			_, ok := this.waitingTmp[k]
+			if !ok && k != "" {
+				group = k
+				break
+			}
+		}
+	}
+	delete(this.waiting, group)
+	this.waitingTmp[group] = true
+	this.waitingMutex.Unlock()
+
+	if "" != group {
+		text, err := ioutil.ReadFile(PasswordPath + group)
+		if nil == err {
+			err = os.Rename(PasswordPath+group, PasswordPath+group+Confirming)
 			if nil == err {
-				err = os.Rename(PasswordPath+group, PasswordPath+group+Confirming)
-				if nil == err {
-					this.mutex.Lock()
-					_, ok := this.data[group]
-					if !ok {
-						this.data[group] = time.TimestampNowMs()
-					}
-					this.mutex.Unlock()
-					if ok {
-						return nil
-					}
-					log.Info.Println("FileWork Get", group)
-					return &File{
-						Name: group,
-						Text: string(text),
-					}
-				} else {
-					log.Error.Println("FileWork Get", group, err)
+				this.mutex.Lock()
+				_, ok := this.data[group]
+				if !ok {
+					this.data[group] = time.TimestampNowMs()
+				}
+				this.mutex.Unlock()
+
+				this.waitingMutex.Lock()
+				delete(this.waitingTmp, group)
+				this.waitingMutex.Unlock()
+
+				if ok {
+					return nil
+				}
+
+				log.Info.Println("FileWork Get", group)
+
+				return &File{
+					Name: group,
+					Text: string(text),
 				}
 			} else {
 				log.Error.Println("FileWork Get", group, err)
 			}
+		} else {
+			log.Error.Println("FileWork Get", group, err)
 		}
-	} else {
-		log.Error.Println("FileWork Get", err)
 	}
+
+	this.waitingMutex.Lock()
+	delete(this.waitingTmp, group)
+	this.waitingMutex.Unlock()
 
 	return nil
 }
@@ -277,7 +315,6 @@ func (this *FileWork) FileInfo() map[string]map[string]int64 {
 	waiting := make(map[string]int64)
 	confirming := make(map[string]int64)
 	processing := make(map[string]int64)
-	complete := make(map[string]int64)
 
 	files, err := ioutil.ReadDir(PasswordPath)
 	if nil == err && len(files) > 0 {
@@ -289,8 +326,6 @@ func (this *FileWork) FileInfo() map[string]map[string]int64 {
 					confirming[file.Name()] = file.Size()
 				} else if strings.HasSuffix(file.Name(), Processing) {
 					processing[file.Name()] = file.Size()
-				} else if strings.HasSuffix(file.Name(), Complete) {
-					complete[file.Name()] = file.Size()
 				}
 			}
 		}
@@ -302,7 +337,6 @@ func (this *FileWork) FileInfo() map[string]map[string]int64 {
 	data["waiting"] = waiting
 	data["confirming"] = confirming
 	data["processing"] = processing
-	data["complete"] = complete
 
 	return data
 }
@@ -311,7 +345,6 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 	waiting := 0
 	confirming := 0
 	processing := 0
-	complete := 0
 
 	files, err := ioutil.ReadDir(PasswordPath)
 	if nil == err && len(files) > 0 {
@@ -323,8 +356,6 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 					confirming++
 				} else if strings.HasSuffix(file.Name(), Processing) {
 					processing++
-				} else if strings.HasSuffix(file.Name(), Complete) {
-					complete++
 				}
 			}
 		}
@@ -332,22 +363,16 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 		log.Error.Println("FileWork FileInfo", err)
 	}
 
-	total := waiting + confirming + processing + complete
+	total := waiting + confirming + processing
 
 	waitingPercent := 0
 	confirmingPercent := 0
 	processingPercent := 0
-	completePercent := 0
 	if total > 0 {
 		waitingPercent = (waiting * 100) / total
 		confirmingPercent = (confirming * 100) / total
 		processingPercent = (processing * 100) / total
-		completePercent = 100 - waitingPercent - confirmingPercent - processingPercent
 	}
-	//waitingPercent := (waiting * 100) / total
-	//confirmingPercent := (confirming * 100) / total
-	//processingPercent := (processing * 100) / total
-	//completePercent := 100 - waitingPercent - confirmingPercent - processingPercent
 
 	data := make(map[string]interface{})
 	data["total"] = total
@@ -357,8 +382,6 @@ func (this *FileWork) FileInfoOverView() map[string]interface{} {
 	data["confirming-percent"] = strconv.Itoa(confirmingPercent) + "%"
 	data["processing"] = processing
 	data["processing-percent"] = strconv.Itoa(processingPercent) + "%"
-	data["complete"] = complete
-	data["complete-percent"] = strconv.Itoa(completePercent) + "%"
 
 	return data
 }
@@ -531,7 +554,7 @@ func (this *FileWork) SplitFile() {
 					}
 					if 0 < len(data) {
 						for {
-							if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+file.Name(), data) {
+							if this.WriteFile(PasswordPath+"split-"+strconv.Itoa(count)+"-"+file.Name(), data) {
 								count++
 								data = make([]byte, 0, conf.Conf.StandardFileSize)
 								break
