@@ -18,13 +18,12 @@ import (
 )
 
 type FileWork struct {
-	mutex          sync.Mutex
-	fileSplitMutex sync.Mutex
-	data           map[string]int64
-	rar2MD5        string
-	programMD5     string
-	file           map[string][]byte
-	result         map[string]bool
+	mutex      sync.Mutex
+	data       map[string]int64
+	rar2MD5    string
+	programMD5 string
+	file       map[string][]byte
+	result     map[string]bool
 
 	waiting      map[string]bool
 	waitingTmp   map[string]bool
@@ -62,7 +61,7 @@ func NewFileWork() *FileWork {
 	work.result = make(map[string]bool)
 	work.waiting = make(map[string]bool)
 	work.waitingTmp = make(map[string]bool)
-	work.LoadFile()
+	work.LoadRARFile()
 	return &work
 }
 
@@ -81,6 +80,7 @@ func (this *FileWork) Run() {
 	}
 
 	this.CancelAll()
+	this.LoadFile()
 
 	go func() {
 		for {
@@ -89,13 +89,14 @@ func (this *FileWork) Run() {
 		}
 	}()
 
-	//go func() {
-	//	for {
-	//		if !this.ProductFile() {
-	//			time2.Sleep(time2.Minute)
-	//		}
-	//	}
-	//}()
+	go func() {
+		for {
+			this.SplitFile()
+			this.LoadFile()
+			time2.Sleep(time2.Minute)
+		}
+	}()
+
 }
 
 func (this *FileWork) Test() *File {
@@ -113,43 +114,12 @@ func (this *FileWork) Test() *File {
 }
 
 func (this *FileWork) Get() *File {
-	this.waitingMutex.Lock()
-	if 0 == len(this.waiting) {
-		this.SplitFile()
-		files, err := ioutil.ReadDir(PasswordPath)
-		if nil == err && len(files) > 0 {
-			for _, file := range files {
-				if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
-					this.waiting[file.Name()] = true
-				}
-			}
-		}
-	}
 	group := ""
+	this.waitingMutex.Lock()
 	for k, _ := range this.waiting {
-		_, ok := this.waitingTmp[k]
-		if !ok && k != "" {
+		if k != "" {
 			group = k
 			break
-		}
-	}
-	if "" == group {
-		this.SplitFile()
-		files, err := ioutil.ReadDir(PasswordPath)
-		if nil == err && len(files) > 0 {
-			for _, file := range files {
-				if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
-					this.waiting[file.Name()] = true
-				}
-			}
-		}
-
-		for k, _ := range this.waiting {
-			_, ok := this.waitingTmp[k]
-			if !ok && k != "" {
-				group = k
-				break
-			}
 		}
 	}
 	delete(this.waiting, group)
@@ -490,7 +460,7 @@ func (this *FileWork) DownloadFile(md5 string) []byte {
 	return this.file[md5]
 }
 
-func (this *FileWork) LoadFile() {
+func (this *FileWork) LoadRARFile() {
 	var names []string
 	if "linux" == runtime.GOOS {
 		names = []string{RARFile, ProgramFileLinux}
@@ -525,7 +495,6 @@ func (this *FileWork) isSmallSize(file os.FileInfo) bool {
 }
 
 func (this *FileWork) SplitFile() {
-	this.fileSplitMutex.Lock()
 	files, err := ioutil.ReadDir(PasswordPath)
 	if nil == err && len(files) > 0 {
 		for _, file := range files {
@@ -554,7 +523,7 @@ func (this *FileWork) SplitFile() {
 					}
 					if 0 < len(data) {
 						for {
-							if this.WriteFile(PasswordPath+"split-"+strconv.Itoa(count)+"-"+file.Name(), data) {
+							if this.WriteFile(PasswordPath+strconv.Itoa(count)+"-"+file.Name(), data) {
 								count++
 								data = make([]byte, 0, conf.Conf.StandardFileSize)
 								break
@@ -567,12 +536,25 @@ func (this *FileWork) SplitFile() {
 				} else {
 					log.Error.Println("FileWork SplitFile", err)
 				}
-
-				break
 			}
 		}
 	}
-	this.fileSplitMutex.Unlock()
+}
+
+func (this *FileWork) LoadFile() {
+	files, err := ioutil.ReadDir(PasswordPath)
+	if nil == err && len(files) > 0 {
+		for _, file := range files {
+			if !file.IsDir() && strings.HasSuffix(file.Name(), Waiting) && this.isSmallSize(file) {
+				this.waitingMutex.Lock()
+				_, ok := this.waitingTmp[file.Name()]
+				if !ok {
+					this.waiting[file.Name()] = true
+				}
+				this.waitingMutex.Unlock()
+			}
+		}
+	}
 }
 
 func (this *FileWork) WriteFile(filepath string, data []byte) bool {
